@@ -11,8 +11,8 @@ Typescript版的sproto，sproto是skynet框架的一个通信模块
 3. xxxx
 
 #### 运行
-
+```js
 tsc test.ts
 node test.js
-
+```
 
