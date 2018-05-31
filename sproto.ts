@@ -1,3 +1,4 @@
+import {Buffer} from "./buffer/buffer";
 const gettype=Object.prototype.toString
 
 const SPROTO_TARRAY = 0x80;
@@ -196,7 +197,8 @@ class Sproto {
 
 		ctx = this.common_filter(ctx);
 		this.parse(ctx);
-		this.buffer = Buffer.allocUnsafe(4);
+		// this.buffer = Buffer.allocUnsafe(4);
+		this.buffer = Buffer.allocUnsafe(2048);
 		this.header_tmp = {type: null, session: null};
 	}
 
@@ -209,6 +211,10 @@ class Sproto {
 		let stype = new Stype(name);
 		let content = type.input.replace(/.?{|}/g, "");
 		let lines = content.match(/\w+\s+\d+\s*:\s*\*?[a-z]+/gi);
+
+		if (isNull(lines)) {
+			return stype;
+		}
 
 		let maxn = lines.length;
 		let offset = 8888888888;
@@ -260,7 +266,7 @@ class Sproto {
 
 
 	private parse(text: string) {
-		let types = text.match(/\.[a-z]+[\s\n]+{[^{}]+}/ig);
+		let types = text.match(/\.[a-z]+[\s\n]*{[^{}]+}/ig);
 		if (isNull(types) === false) {
 			for (let i = 0; i < types.length; i++) {
 				let mtype = types[i];
@@ -590,25 +596,24 @@ class Sproto {
 						}
 					}
 
-					tu = Buffer.from(tu);
-					if (sumsz - tu.length - SIZEOF_LENGTH < 0) {
+					let fsz = 0;
+					if (isstring) {
+						tu = Buffer.from(tu);
+						if (sumsz - data - tu.length - SIZEOF_LENGTH < 0) {
+							sz = -1;
+							break;
+						}
+						fsz = tu.length;
+						let value_idx = data + SIZEOF_LENGTH;
+						this.buffer.fill(tu, value_idx, value_idx + fsz);
+					} else {
+						fsz = this.lencode(f.type, tu, data + SIZEOF_LENGTH);
+					}
+					if (fsz < 0) {
 						sz = -1;
 					} else {
-						let fsz = 0;
-						if (isstring) {
-							fsz = tu.length;
-							let value_idx = data + SIZEOF_LENGTH;
-							this.buffer.fill(tu, value_idx, value_idx + fsz);
-						} else {
-							fsz = this.lencode(f.type, tu, data + SIZEOF_LENGTH);
-						}
-						if (fsz < 0) {
-							sz = -1;
-						} else {
-							sz = fill_size(this.buffer, data, fsz);
-						}
+						sz = fill_size(this.buffer, data, fsz);
 					}
-
 					break;
 				}
 			}

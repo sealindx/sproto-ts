@@ -39,11 +39,13 @@ let session = 1;
 let client_request = sp.attach();
 let req = client_request("foobar", { what: "hello", value: "lindx 不喜欢写代码" }, session);
 let data = sp.dispatch(req);
-console.log(data.result);
+//　如果是一个　request 请求， data　包含replay="REQUEST"　以及　result　数据
+console.log(data.replay, data.result);
 
 let resp = data.response({ ok: false });
 data = sp.dispatch(resp);
-console.log(data.result);
+// 如果是一个　response 响应，那么　data 包含　replay＝"RESPONSE", session, result
+console.log(data.replay, data.session, data.result);
 
 console.log("======================test2");
 let packbuffer = sp.pencode("package", {session: 12, type: 0});
