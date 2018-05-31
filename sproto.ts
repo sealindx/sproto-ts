@@ -666,26 +666,25 @@ class Sproto {
 		switch (type) {
 		case "integer":
 			let len = buffer[data_idx++];
-			sz -= 1;
+			--sz;
 			if (len === SIZEOF_INT32) {
-				let counter = sz/SIZEOF_INT32;
-				for (let i = 0; i < counter; ++i) {
+				if (sz % SIZEOF_INT32 != 0) {
+					return false;
+				}
+
+				for (let i = 0; i < sz/SIZEOF_INT32; ++i) {
 					result[i] = this.todword(buffer, data_idx);
 					data_idx += SIZEOF_INT32;
 				}
 			} else if (len === SIZEOF_INT64) {
-				let counter = sz/SIZEOF_INT64;
-				if (counter % SIZEOF_INT64 !== 0) {
+				if (sz % SIZEOF_INT64 !== 0) {
 					return false;
 				}
 
-				for (let i = 0; i < counter; ++i) {
-					let low = this.todword(buffer, data_idx);
-					let hi = this.todword(buffer, data_idx + SIZEOF_INT32, true);
-					if (hi === -3) {
-						low = this.todword(buffer, data_idx, true);
-						hi = this.todword(buffer, data_idx + SIZEOF_INT32, true);
-					}
+				for (let i = 0; i < sz/SIZEOF_INT64; ++i) {
+					let	low = this.todword(buffer, data_idx, true);
+					let	hi = this.todword(buffer, data_idx + SIZEOF_INT32, true);
+
 					result[i] = hi_low_uint64(low, hi);
 					data_idx += SIZEOF_INT64;
 				}	
@@ -814,11 +813,8 @@ class Sproto {
 						let low = this.todword(buffer, currentdata_idx);
 						let hi = 0;
 						if (sz === SIZEOF_INT64) {
-							hi = this.todword(buffer, currentdata_idx + SIZEOF_INT32);
-							if (hi === -3) {
-								low = this.todword(buffer, currentdata_idx, true);
-								hi = this.todword(buffer, currentdata_idx + SIZEOF_INT32, true);
-							}
+							low = this.todword(buffer, currentdata_idx, true);
+							hi = this.todword(buffer, currentdata_idx + SIZEOF_INT32, true);
 						} else if (sz !== SIZEOF_INT32) {
 							return -1;
 						}
@@ -1022,7 +1018,7 @@ class Sproto {
 				let n = (buffer[srcidx++] + 1) * 8;
 				--srcsz;
 
-				if (srcsz < n + 1)
+				if (srcsz < n)
 					return -1;
 
 				if (outsz - outidx > n) {
