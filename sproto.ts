@@ -1022,7 +1022,7 @@ class Sproto {
 				let n = (buffer[srcidx++] + 1) * 8;
 				--srcsz;
 
-				if (srcsz < n + 1)
+				if (srcsz < n)
 					return -1;
 
 				if (outsz - outidx > n) {
