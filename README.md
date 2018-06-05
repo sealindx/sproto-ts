@@ -1,7 +1,51 @@
 # Sproto Typescript版
 
 #### 项目介绍
-Typescript版的sproto，sproto是skynet框架的一个通信模块
+Typescript版的sproto，sproto是skynet框架的一个通信模块，ts版的sproto不需要过多的依赖其他工具。像lua那样可以直接引用sproto协议。  
+
+例如：
+```ts
+let proto = `
+.package {
+    type 0: integer
+    session 1: integer
+}
+
+foobar 1 {
+    request {
+        what 0 : string
+        value 1: string
+    }
+    response {
+        ok 0 : boolean
+    }
+}
+
+get 2 {
+    request {
+        what 0 : string
+    }
+    response {
+        result 0 : string
+    }
+}
+
+set 3 {
+    request {
+        what 0 : string   #参数1
+        value 1 : string  #参数2
+    }
+}
+`;
+
+let sp = new Sproto(proto); //加载协议内容，初始化
+let client_request = sp.attach();    //获取一个request请求的回调函数
+let req = client_request("foobar", { what: "hello", value: "lindx 不喜欢写代码" }, session); //req是一个Buffer数据类型，可以直接base64编码后发送给 skynet 服务端。
+
+let data = sp.dispatch(req);    //这个对应于 host:dispatch(req)
+console.log(data.result);       //打印数据
+
+```
 
 
 #### 安装教程
@@ -23,6 +67,8 @@ import { Buffer } from "buffer";
 tsc test.ts
 node test.js
 ```
+
+
 ### 注意
 在网络通信过程中，一定要将要发送的 buffer 转成 base64输出，再经网路socket传输，否则对方在接收时会出现乱码．
 ```js
