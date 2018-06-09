@@ -210,7 +210,7 @@ class Sproto {
 
 		let stype = new Stype(name);
 		let content = type.input.replace(/.?{|}/g, "");
-		let lines = content.match(/\w+\s+\d+\s*:\s*\*?[a-z]+/gi);
+		let lines = content.match(/\w+\s+\d+\s*:\s*\*?\w+/gi);
 
 		if (isNull(lines)) {
 			return stype;
