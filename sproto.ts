@@ -240,7 +240,7 @@ class Sproto {
 	}
 
 	protocol_create(protocol: string) {
-		let nametag = protocol.match(/[a-z]+\s+\d+/i)[0];
+		let nametag = protocol.match(/\w+\s+\d+/i)[0];
 		let arr = nametag.split(" ");
 		let name = arr[0];
 		let tag = Number(arr[1]);
@@ -266,11 +266,11 @@ class Sproto {
 
 
 	private parse(text: string) {
-		let types = text.match(/\.[a-z]+[\s\n]*{[^{}]+}/ig);
+		let types = text.match(/\.\w+[\s\n]*{[^{}]+}/ig);
 		if (isNull(types) === false) {
 			for (let i = 0; i < types.length; i++) {
 				let mtype = types[i];
-				let typestr = mtype.match(/\.[a-z]+/i);
+				let typestr = mtype.match(/\.\w+/i);
 				if (typestr && typestr[0] != null) {
 					let stype = this.type_create(typestr);
 					this.t[stype.name] = stype;
@@ -278,7 +278,7 @@ class Sproto {
 			}
 		}
 
-		let protocols = text.match(/[a-z]+\s+\d+\s*{[\n\t\s]*(request\s*{[^{}]+})?[\n\t\s]*(response\s*{[^{}]+})?[\n\t\s]*}/ig);
+		let protocols = text.match(/\w+\s+\d+\s*{[\n\t\s]*(request\s*{[^{}]+})?[\n\t\s]*(response\s*{[^{}]+})?[\n\t\s]*}/ig);
 		if (isNull(protocols) === false) { 
 			for (let i = 0; i < protocols.length; ++i) {
 				this.protocol_create(protocols[i]);
@@ -362,7 +362,7 @@ class Sproto {
 			}
 
 			size -= intlen;
-			if (size < 0) {
+			if (size < 0 || size < SIZEOF_INT64) {
 				return -1;
 			}
 		}
@@ -1048,6 +1048,8 @@ class Sproto {
 					} else {
 						if (outidx < outsz) {
 							outbuffer[outidx] = 0;
+						} else {
+							return outidx + 1;
 						}
 						++outidx;
 					}
@@ -1124,7 +1126,7 @@ class Sproto {
 		}.bind(this);
 	}
 
-	dispatch(buffer: Buffer) {
+	dispatch(buffer: Buffer, serspindex: number = 0) {
 		let bin = this.unpack(buffer);
 		this.header_tmp.type = null;
 		this.header_tmp.session = null;
@@ -1140,13 +1142,16 @@ class Sproto {
 			let p = this.__pcatch[header.type];
 			let result = {};
 
-			if (p.st[REQUEST]) {
+			if (p && p.st[REQUEST]) {
 				let err = this.ldecode(p.st[REQUEST].name, bin, sz, result, p.st[REQUEST]);
 				if (err < 0) {
 					console.log("decode error");
 					return;
 				}
+			} else {
+				console.log("can't find protocol by tag:", header.type);
 			}
+			
 			let session = this.header_tmp.session;
 			if (session) {
 				return {replay: "REQUEST", name: p.name, result: result, response: gen_response(this, p.st[RESPONSE], session).bind(this)};
