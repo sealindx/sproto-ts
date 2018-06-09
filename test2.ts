@@ -4,12 +4,18 @@ let s2c = `
     session 1 : integer
 }
 
+.h5 {
+    id 0: integer
+    name 1: string
+}
+
 heartbeat 1 {}
 
 userInfo 2 {
     request {
         name 0: string
         age 1: integer
+        hs 2: h5
     }
 
     response {
@@ -92,7 +98,7 @@ replay参数来区分，如果是回应的，那么replay = "RESPONSE"，
 console.log("\n--------------test2(server --> client)");
 let server_request = ssp.attach();
 session = 2;
-req = server_request("userInfo", {name: "tom", age: 18}, session);
+req = server_request("userInfo", {name: "tom", age: 18, hs: {id: 1010, name: "xxx"}}, session);
 
 // -----------client receive msg 
 crecv = csp.dispatch(req, 0)

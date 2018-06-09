@@ -1,4 +1,4 @@
-import {Buffer} from "./buffer/buffer";
+// import {Buffer} from "./buffer/buffer";
 const gettype=Object.prototype.toString
 
 const SPROTO_TARRAY = 0x80;
@@ -666,7 +666,7 @@ class Sproto {
 		return SIZEOF_HEADER + index * SIZEOF_FIELD + data_sz;
 	}
 
-	decode_array(type: string, buffer, data_idx: number, sz: number) {
+	decode_array(type: string, buffer, data_idx: number, sz: number, st?, reqdecode?) {
 		let result :any= [];
 
 		switch (type) {
@@ -735,8 +735,7 @@ class Sproto {
 				data_idx += SIZEOF_LENGTH;
 				result[j] = {};
 
-				this.ldecode(type, buffer, data_idx, result[j++]);
-
+				this.ldecode(type, buffer, data_idx, result[j++], null, reqdecode);
 				data_idx += len;
 				sz -= len;
 
@@ -763,7 +762,7 @@ class Sproto {
 		return result;
 	}
 
-	private ldecode(typename: string, buffer: Buffer, startpoint:number, result: object, st?) {
+	private ldecode(typename: string, buffer: Buffer, startpoint:number, result: object, st?, reqdecode?) {
 		let fn = this.toword(buffer, startpoint);
 		let size = SIZEOF_HEADER;
 
@@ -786,7 +785,7 @@ class Sproto {
 			}
 
 			value = (value>>1) - 1;
-			let f = this.findtag(typename, tag, st);
+			let f = this.findtag(typename, tag, st, reqdecode);
 			if (f === null) {
 				continue;
 			}
@@ -803,7 +802,7 @@ class Sproto {
 					let array_res :any = [];
 					if (sz > 0) {
 						let t = f.type.substring(1, f.type.length);
-						array_res = this.decode_array(t, buffer, currentdata_idx, sz);
+						array_res = this.decode_array(t, buffer, currentdata_idx, sz, st, reqdecode);
 						if (array_res === false) {
 							console.log("decode array filed(%s) error", f.name);
 							return -1;
@@ -829,7 +828,7 @@ class Sproto {
 						break;
 					default:
 						let subres = {};
-						let tmpsz = this.ldecode(f.type, buffer, currentdata_idx, subres);
+						let tmpsz = this.ldecode(f.type, buffer, currentdata_idx, subres, null, reqdecode);
 						if (tmpsz < 0) {
 							return tmpsz;
 						}
@@ -1084,12 +1083,17 @@ class Sproto {
 		return this.p[name];
 	}
 
-	private findtag(typename: string, tag: number, st?) {
+	private findtag(typename: string, tag: number, st?, reqdecode?) {
 		let type = null;
-		if (st) {
-			type = st;
+		if (!isNull(reqdecode) && isNull(st)) {
+			let sp = Sproto.sp_tb[reqdecode];
+			type = sp.t[typename];
 		} else {
-			type = this.querytype(typename);
+			if (st) {
+				type = st;
+			} else {
+				type = this.querytype(typename);
+			}
 		}
 
 		for (let f of type.f) {
@@ -1154,7 +1158,7 @@ class Sproto {
 			}
 
 			if (p && p.st[REQUEST]) {
-				let err = this.ldecode(p.st[REQUEST].name, bin, sz, result, p.st[REQUEST]);
+				let err = this.ldecode(p.st[REQUEST].name, bin, sz, result, p.st[REQUEST], spindex);
 				if (err < 0) {
 					console.log("decode error");
 					return;
