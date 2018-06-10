@@ -188,6 +188,7 @@ class Sproto {
 	public p: Protocol[] = [];
 	private buffer: Buffer;
 	private sz: number;
+	private static sp_tb: Sproto[] = [];
 	public header_tmp;
 
 	constructor(public ctx: string, 
@@ -1100,6 +1101,11 @@ class Sproto {
 		return null;
 	}
 
+	host(sp: Sproto) {
+		Sproto.sp_tb.push(sp);
+		this.__pcatch = null;
+	}
+
 	attach() {
 		return function (name, args, session?) {
 			let p = this.queryprotocol(name);
@@ -1126,7 +1132,7 @@ class Sproto {
 		}.bind(this);
 	}
 
-	dispatch(buffer: Buffer, serspindex: number = 0) {
+	dispatch(buffer: Buffer, spindex: number = 0) {
 		let bin = this.unpack(buffer);
 		this.header_tmp.type = null;
 		this.header_tmp.session = null;
@@ -1139,8 +1145,13 @@ class Sproto {
 		}
 		if (header.type) {
 			// request
-			let p = this.__pcatch[header.type];
 			let result = {};
+			let p = null;
+			if (this.__pcatch === null) {
+				p = Sproto.sp_tb[spindex].__pcatch[header.type];
+			} else {
+				p = this.__pcatch[header.type];
+			}
 
 			if (p && p.st[REQUEST]) {
 				let err = this.ldecode(p.st[REQUEST].name, bin, sz, result, p.st[REQUEST]);
