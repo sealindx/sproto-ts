@@ -122,7 +122,7 @@ function checkvalue(args, type: string) {
 	let value = args.value;
 	let res = checktype(value, type);
 	if (res !== true) {
-		console.error(".%s[%d] is not an %s (Is a %s)", args.name, args.i, type, res, value);
+		console.error("[sproto error]: .%s[%d] is not an %s (Is a %s)", args.name, args.i, type, res, value);
 		return null;
 	}
 
@@ -493,8 +493,8 @@ class Sproto {
 
 				let alloc_sz = this.buffer.length * 2;
 				if (alloc_sz > 65535) {
-					console.log("alloc memory more 64k");
-					return;
+					console.log("[sproto warning]: alloc memory more 6k");
+					// return;
 				}
 				this.buffer = Buffer.allocUnsafe(alloc_sz);
 			} else {
@@ -516,7 +516,7 @@ class Sproto {
 		}
 
 		if (type === undefined) {
-			console.log("Invalid field type %s", typename);
+			console.error("[sproto error]: Invalid field type %s", typename);
 			return ERROR_TYPE;
 		}
 
@@ -611,6 +611,9 @@ class Sproto {
 						fsz = this.lencode(f.type, tu, data + SIZEOF_LENGTH);
 					}
 					if (fsz < 0) {
+						if (fsz === ERROR_TYPE) {
+							return ERROR_TYPE;
+						}
 						sz = -1;
 					} else {
 						sz = fill_size(this.buffer, data, fsz);
@@ -756,7 +759,7 @@ class Sproto {
 		let result = {};
 		let sz = this.ldecode(typename, buffer, 0, result);
 		if (sz < 0) {
-			console.log("decode error");
+			console.error("[sproto error]: decode failed");
 			return;
 		}
 		return result;
@@ -804,7 +807,7 @@ class Sproto {
 						let t = f.type.substring(1, f.type.length);
 						array_res = this.decode_array(t, buffer, currentdata_idx, sz, st, reqdecode);
 						if (array_res === false) {
-							console.log("decode array filed(%s) error", f.name);
+							console.error("[sproto error]: decode array filed(%s) failed", f.name);
 							return -1;
 						}
 					}
@@ -838,7 +841,7 @@ class Sproto {
 					}
 				}
 			} else if (f.type !== "integer" && f.type !== "boolean"){ // value>=0，必须是 integer 或者 boolean，所以要先判断 f.type类型
-				console.log("error field(%s) type:", f.name, f.type);
+				console.error("[sproto error]: field(%s) type:", f.name, f.type);
 				return -1;
 			} else {	// value >= 0
 				if (f.type === "boolean") {
@@ -983,12 +986,13 @@ class Sproto {
 	}
 
 	unpack(buffer: Buffer) {
-		let osz = ENCODE_BUFFERSIZE;
+		// let osz = ENCODE_BUFFERSIZE;
+		let osz = buffer.length * 2;
 		let outbuffer = Buffer.allocUnsafe(osz);
 		let sz = this.lunpack(buffer, outbuffer);
 
 		if (sz < 0) {
-			console.log("Invalid unpack stream");
+			console.error("[sproto error]: Invalid unpack stream");
 			return null;
 		} 
 
@@ -1000,7 +1004,7 @@ class Sproto {
 
 			sz = this.lunpack(buffer, outbuffer);
 			if (sz < 0) {
-				console.log("Invalid unpack stream");
+				console.error("[sproto error]: Invalid unpack stream");
 				return null;
 			}
 		}
@@ -1114,7 +1118,7 @@ class Sproto {
 		return function (name, args, session?) {
 			let p = this.queryprotocol(name);
 			if (isNull(p)) {
-				console.log("can't found ", name);
+				console.error("[sproto error]: can't found ", name);
 				return ;
 			}
 			this.header_tmp.type = p.tag;
@@ -1144,7 +1148,7 @@ class Sproto {
 		let header = this.header_tmp;
 		let sz = this.ldecode(this.__pack, bin, 0, this.header_tmp);
 		if (sz < 0) {
-			console.log("decode error");
+			console.error("[sproto error]: decode failed");
 			return;
 		}
 		if (header.type) {
@@ -1160,29 +1164,31 @@ class Sproto {
 			if (p && p.st[REQUEST]) {
 				let err = this.ldecode(p.st[REQUEST].name, bin, sz, result, p.st[REQUEST], spindex);
 				if (err < 0) {
-					console.log("decode error");
+					console.error("[sproto error]: decode failed");
 					return;
 				}
 			} else {
-				console.log("can't find protocol by tag:", header.type);
+				console.error("[sproto error]: can't find protocol by tag:", header.type);
 			}
 			
 			let session = this.header_tmp.session;
 			if (session) {
 				return {replay: "REQUEST", name: p.name, result: result, response: gen_response(this, p.st[RESPONSE], session).bind(this)};
+			} else {
+				return {replay: "REQUEST", name: p.name, result: result, response: null};
 			}
 
 		} else {
 			// response
 			let session = this.header_tmp.session
 			if (isNull(session)) {
-				console.error("session not found");
+				console.error("[sproto error]: session not found");
 				return;
 			}
 
 			let response = this.__session[session];
 			if (isNull(response)) {
-				console.error("Unknown session", session);
+				console.error("[sproto error]: Unknown session", session);
 				return;
 			}
 
@@ -1193,7 +1199,7 @@ class Sproto {
 				let result = {};
 				let err  = this.ldecode(response.name, bin, sz, result, response);
 				if (err < 0) {
-					console.log("decode error");
+					console.error("[sproto error]: decode failed");
 					return;
 				}
 				return {replay: "RESPONSE", session: session, result: result};
