@@ -96,10 +96,11 @@ function encode_uint64(v, data, data_idx, size) {
 	data[data_idx + 6] = (v >> 16) & 0xff;
 	data[data_idx + 7] = (v >> 24) & 0xff;
 	
-	data[data_idx + 8] =  uint64_rshift(v, 32) & 0xff;
-	data[data_idx + 9] =  uint64_rshift(v, 40) & 0xff;
-	data[data_idx + 10] = uint64_rshift(v, 48) & 0xff;
-	data[data_idx + 11] = uint64_rshift(v, 56) & 0xff;
+	let hi =  uint64_rshift(v, 32);
+	data[data_idx + 8] = hi & 0xff;
+	data[data_idx + 9] = (hi >> 8) & 0xff;
+	data[data_idx + 10] = (hi >> 16) & 0xff;
+	data[data_idx + 11] = (hi >> 24) & 0xff;
 	return fill_size(data, data_idx, SIZEOF_INT64);
 }
 
@@ -354,10 +355,11 @@ class Sproto {
 				data[array_index++] = (value >> 16) & 0xff;
 				data[array_index++] = (value >> 24) & 0xff;
 
-				data[array_index++] = uint64_rshift(value, 32) & 0xff;
-				data[array_index++] = uint64_rshift(value, 40) & 0xff;
-				data[array_index++] = uint64_rshift(value, 48) & 0xff;
-				data[array_index++] = uint64_rshift(value, 56) & 0xff;
+				let hi =  uint64_rshift(value, 32);
+				data[data_idx + 8] = hi & 0xff;
+				data[data_idx + 9] = (hi >> 8) & 0xff;
+				data[data_idx + 10] = (hi >> 16) & 0xff;
+				data[data_idx + 11] = (hi >> 24) & 0xff;
 
 				intlen = SIZEOF_INT64;
 			}
