@@ -145,14 +145,14 @@ function uint32_to_uint64(data, data_idx: number, negative: number|boolean) {
 }
 
 
-function gen_response(self, response, session) {
+function gen_response(self, response, spindex, session) {
 	return function(args) {
 		self.header_tmp.type = null;
 		self.header_tmp.session = session;
 
 		let header = self.encode(self.__pack, self.header_tmp);
 		if (response) {
-			let content = self.encode(response.name, args, response);
+			let content = self.encode("", args, response, spindex);
 			let sz = header.length + content.length;
 			return self.pack(Buffer.concat([header, content], sz));
 		} else {
@@ -207,7 +207,7 @@ class Sproto {
 	private type_create(type) {
 		let name = type[0];
 		if (name.charAt(0) === ".") {
-			name = name.substr(1, name.length) // substr 去掉第一个字符的点.
+			name = name.substr(1, name.length); // substr 去掉第一个字符的点.
 		}
 
 		let stype = new Stype(name);
@@ -435,8 +435,7 @@ class Sproto {
 			if (size < 0) {
 				return -1;
 			}
-
-			sz = this.lencode(args.type, v[i], start + SIZEOF_LENGTH);
+			sz = this.lencode(args.type, v[i], start + SIZEOF_LENGTH, null, args.spindex);
 			if (sz < 0) {
 				if (sz === ERROR_TYPE) {
 					return ERROR_TYPE;
@@ -484,10 +483,10 @@ class Sproto {
 		return fill_size(data, data_idx, sz);
 	}
 
-	encode(typeName: string, tbl: any, st?) {
+	encode(typeName: string, tbl: any, st?, spindex?) {
 		let sz = 0;
 		while(true) {
-			sz = this.lencode(typeName, tbl, 0, st);
+			sz = this.lencode(typeName, tbl, 0, st, spindex);
 			if (sz < 0) {
 				if (sz === ERROR_TYPE) {
 					return;
@@ -509,16 +508,17 @@ class Sproto {
 		return result;
 	}
 
-	private lencode(typename: string, tbl: any, startpoint: number, st?) {
+	private lencode(typename: string, tbl: any, startpoint: number, st?, spindex?) {
 		let type = null;
+
 		if (st) {
 			type = st;
 		} else {
-			type = this.querytype(typename);
+			type = this.vquerytype(typename, spindex);
 		}
 
 		if (type === undefined) {
-			console.error("[sproto error]: Invalid field type %s", typename);
+			console.error("[sproto error]: Invalid field type %s", typename, spindex);
 			return ERROR_TYPE;
 		}
 
@@ -555,7 +555,7 @@ class Sproto {
 				}
 				let t = f.type.substring(1, f.type.length);
 
-				sz = this.encode_array(tu, {type: t, name: f.name}, this.buffer, data, sumsz);
+				sz = this.encode_array(tu, {type: t, name: f.name, spindex: spindex}, this.buffer, data, sumsz);
 			} else {
 				switch(f.type) {
 				case "boolean":
@@ -610,7 +610,7 @@ class Sproto {
 						let value_idx = data + SIZEOF_LENGTH;
 						this.buffer.fill(tu, value_idx, value_idx + fsz);
 					} else {
-						fsz = this.lencode(f.type, tu, data + SIZEOF_LENGTH);
+						fsz = this.lencode(f.type, tu, data + SIZEOF_LENGTH, null, spindex);
 					}
 					if (fsz < 0) {
 						if (fsz === ERROR_TYPE) {
@@ -900,7 +900,7 @@ class Sproto {
 		dstbuffer[ff_desstart] = 0xff;
 		dstbuffer[ff_desstart + 1] = align8_n / 8 - 1;
 
-		let start = ff_desstart + 2
+		let start = ff_desstart + 2;
 		let str = "";
 
 		for (let i = start; i < start + n; ++i) {
@@ -1085,6 +1085,15 @@ class Sproto {
 		return this.t[name];
 	}
 
+	private vquerytype(name: string, reqdecode?) {
+		if (!reqdecode) {
+			return this.t[name];
+		} else {
+			let sp = Sproto.sp_tb[reqdecode];
+			return sp.t[name];
+		}
+	}
+
 	private queryprotocol(name: string) {
 		return this.p[name];
 	}
@@ -1175,14 +1184,14 @@ class Sproto {
 			
 			let session = this.header_tmp.session;
 			if (session) {
-				return {replay: "REQUEST", name: p.name, result: result, response: gen_response(this, p.st[RESPONSE], session).bind(this)};
+				return {replay: "REQUEST", name: p.name, result: result, response: gen_response(this, p.st[RESPONSE], spindex, session).bind(this)};
 			} else {
 				return {replay: "REQUEST", name: p.name, result: result, response: null};
 			}
 
 		} else {
 			// response
-			let session = this.header_tmp.session
+			let session = this.header_tmp.session;
 			if (isNull(session)) {
 				console.error("[sproto error]: session not found");
 				return;
