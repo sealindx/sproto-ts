@@ -243,7 +243,7 @@ class Sproto {
 
 	protocol_create(protocol: string) {
 		let nametag = protocol.match(/\w+\s+\d+/i)[0];
-		let arr = nametag.split(" ");
+		let arr = nametag.split(/\s+/);
 		let name = arr[0];
 		let tag = Number(arr[1]);
 
