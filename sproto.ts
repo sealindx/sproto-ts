@@ -1,7 +1,7 @@
-// import {Buffer} from "./buffer/buffer";
+import {Buffer} from "./buffer/buffer";
 const gettype=Object.prototype.toString
 
-const SPROTO_TARRAY = 0x80;
+
 const CHUNK_SIZE = 1000;
 const SIZEOF_LENGTH = 4;
 const SIZEOF_HEADER  = 2;
@@ -16,6 +16,12 @@ const ENCODE_BUFFERSIZE = 2050;
 const REQUEST = 0;
 const RESPONSE = 1;
 
+
+const SPROTO_TINTEGER = 1;
+const SPROTO_TBOOLEAN = 2;
+const SPROTO_TSTRING  = 4;
+const SPROTO_TSTRUCT  = 8;
+const SPROTO_TARRAY = 16;
 /*
  * gettype.call('aaaa')输出      [object String]
  * gettype.call(2222) 输出      [object Number]
@@ -152,7 +158,7 @@ function gen_response(self, response, spindex, session) {
 
 		let header = self.encode(self.__pack, self.header_tmp);
 		if (response) {
-			let content = self.encode("", args, response, spindex);
+			let content = self.encode(response.name, args, response, spindex);
 			let sz = header.length + content.length;
 			return self.pack(Buffer.concat([header, content], sz));
 		} else {
@@ -162,6 +168,9 @@ function gen_response(self, response, spindex, session) {
 }
 
 class Field {
+	st: number = -1;
+	ntype: number = -1;
+
 	constructor(public name: string, public tag: number, public type: string) {
 
 	}
@@ -204,17 +213,17 @@ class Sproto {
 		this.header_tmp = {type: null, session: null};
 	}
 
-	private type_create(type) {
+	private type_create(type):Stype {
 		let name = type[0];
 		if (name.charAt(0) === ".") {
-			name = name.substr(1, name.length); // substr 去掉第一个字符的点.
+			name = name.substr(1, name.length) // substr 去掉第一个字符的点.
 		}
 
 		let stype = new Stype(name);
 		let content = type.input.replace(/.?{|}/g, "");
 		let lines = content.match(/\w+\s+\d+\s*:\s*\*?\w+/gi);
 
-		if (isNull(lines)) {
+		if (!lines) {
 			return stype;
 		}
 
@@ -242,12 +251,17 @@ class Sproto {
 	}
 
 	protocol_create(protocol: string) {
-		let nametag = protocol.match(/\w+\s+\d+/i)[0];
+		let nametag = protocol.match(/\w+\s{1,}\d+/i)[0];
 		let arr = nametag.split(/\s+/);
 		let name = arr[0];
 		let tag = Number(arr[1]);
-
+		
 		let proto = new Protocol(name, tag);
+
+		if (this.p[name]) {
+			return name;
+		}
+
 		this.p[name] = proto;
 		this.__pcatch[tag] = proto;
 
@@ -266,6 +280,107 @@ class Sproto {
 		}
 	}
 
+	private type_push(type: Stype) {
+		let t = this.t;
+
+	    if (t.length === 0) {
+	        t.push(type);
+	        return true;
+	    }
+
+	    var i = 0;
+	    for (; i < t.length; ++i) {
+	        let v = t[i];
+	        if (type.name < v.name) {
+	            break;
+	        } else if (type.name === v.name) {
+	            return null;
+	        }
+	    }
+	    
+	    t.splice(i, 0, type);
+	    return true;
+	}
+
+	private find_type(tname: string, t?) {
+		let tb = null;
+		if (!t) {
+			tb = this.t;
+		}else {
+			tb = t;
+		}
+
+		let begin = 0;
+	    let end = tb.length - 1;
+
+	    while(begin <= end) {
+	        let mid = (begin + end) >>> 1;
+	        let n = tb[mid];
+	        if (tname === n.name) {
+	            return mid;
+	        }else if (tname > n.name) {
+	            begin = mid + 1;
+	        } else {
+	            end = mid - 1;
+	        }
+	    }
+
+	    return null;
+	}
+
+	private import_field(tname: string) {
+		let result = -1;
+		let st = -1;
+
+		switch (tname) {
+			case "integer":
+				result = SPROTO_TINTEGER;
+				break;
+			case "string":
+				result = SPROTO_TSTRING;
+				break;
+			case "boolean":
+				result = SPROTO_TBOOLEAN;
+				break;
+			default:
+				let ch = tname.charAt(0);
+				let array_type = null;
+
+				if (ch !== "*") {
+					result = SPROTO_TSTRUCT;
+				} else {
+					tname = tname.substr(1, tname.length);
+					[result] = this.import_field(tname);
+					array_type = SPROTO_TARRAY;
+				}
+
+				if (result != -1 && result === SPROTO_TSTRUCT) {
+					st = this.find_type(tname);
+				}
+
+				if (array_type) {
+					result |= array_type;
+				}
+				break;
+		}
+
+		return [result, st];
+	}
+
+	private import_allfields(type: Stype) {
+		let f = type.f;
+		for (var i = 0; i < f.length; ++i) {
+			let [result, st] = this.import_field(f[i].type);
+			if (st === null) {
+				console.error("[sproto error]: Undefined type %s in type %s", f[i].type, f[i].name);
+				return ERROR_TYPE;
+			} else {
+				f[i].ntype = result;
+				f[i].st = st;
+				// console.log(f[i]);
+			}
+		}
+	}
 
 	private parse(text: string) {
 		let types = text.match(/\.\w+[\s\n]*{[^{}]+}/ig);
@@ -274,8 +389,17 @@ class Sproto {
 				let mtype = types[i];
 				let typestr = mtype.match(/\.\w+/i);
 				if (typestr && typestr[0] != null) {
-					let stype = this.type_create(typestr);
-					this.t[stype.name] = stype;
+					let stype: Stype = this.type_create(typestr);
+					if (this.type_push(stype) === null) {
+						console.error("[sproto error]: redefined .%s", stype.name);
+						return ;
+					}
+				}
+			}
+
+			for (let i = 0; i < types.length; i++) {
+				if (this.import_allfields(this.t[i]) === ERROR_TYPE) {
+					return ERROR_TYPE;
 				}
 			}
 		}
@@ -283,10 +407,27 @@ class Sproto {
 		let protocols = text.match(/\w+\s+\d+\s*{[\n\t\s]*(request\s*{[^{}]+})?[\n\t\s]*(response\s*{[^{}]+})?[\n\t\s]*}/ig);
 		if (isNull(protocols) === false) { 
 			for (let i = 0; i < protocols.length; ++i) {
-				this.protocol_create(protocols[i]);
+				let proto_name = this.protocol_create(protocols[i]);
+				if (proto_name) {
+					console.error("[sproto error]: redefined ", proto_name);
+					return ;
+				}
+			}
+
+			for (var key in this.p) {
+				let starr = this.p[key].st;
+				if (starr[REQUEST]) {
+					if (this.import_allfields(starr[REQUEST]) === ERROR_TYPE) {
+						return ERROR_TYPE;
+					}
+				}
+				if (starr[RESPONSE]) {
+					if (this.import_allfields(starr[RESPONSE]) === ERROR_TYPE) {
+						return ERROR_TYPE;
+					}
+				}
 			}
 		}
-
 	}
 
 	// 注释过滤
@@ -394,7 +535,6 @@ class Sproto {
 				return -1;
 			}
 
-
 			let sz = fill_size(data, data_idx, len);
 			let pos = data_idx + SIZEOF_LENGTH;
 			data.fill(v[i], pos, pos + len);
@@ -430,24 +570,28 @@ class Sproto {
 		let sz = 0;
 		let start = data_idx;
 		let total = 0;
+
 		for (let i = 0; i < v.length; ++i) {
 			size -= SIZEOF_LENGTH;
 			if (size < 0) {
 				return -1;
 			}
-			sz = this.lencode(args.type, v[i], start + SIZEOF_LENGTH, null, args.spindex);
-			if (sz < 0) {
-				if (sz === ERROR_TYPE) {
-					return ERROR_TYPE;
+
+			if (args.st >= 0) {
+				sz = this.lencode(args.st, v[i], start + SIZEOF_LENGTH, null, args.spindex);
+				if (sz < 0) {
+					if (sz === ERROR_TYPE) {
+						return ERROR_TYPE;
+					}
+					return sz;
 				}
-				return sz;
+
+				let tmpsz = fill_size(data, start, sz);
+				size -= tmpsz;
+				start += tmpsz;
+
+				total += sz + SIZEOF_LENGTH;
 			}
-
-			let tmpsz = fill_size(data, start, sz);
-			size -= tmpsz;
-			start += tmpsz;
-
-			total += sz + SIZEOF_LENGTH;
 		}
 
 		return total;
@@ -456,20 +600,20 @@ class Sproto {
 	private encode_array(v, args, data, data_idx, size) {
 		let value = null;
 		let sz = 0;
-		size -= SIZEOF_LENGTH;
 
+		size -= SIZEOF_LENGTH;
 		if (size < 0) {
 			return -1;
 		}
 
 		switch(args.type) {
-		case "integer":
+		case SPROTO_TINTEGER:
 			sz = this.encode_integer_array(v, args, data, data_idx + SIZEOF_LENGTH, size);
 			break;
-		case "string":
+		case SPROTO_TSTRING:
 			sz = this.encode_string_array(v, args, data, data_idx + SIZEOF_LENGTH, size);
 			break;
-		case "boolean":
+		case SPROTO_TBOOLEAN:
 			sz = this.encode_boolean_array(v, args, data, data_idx + SIZEOF_LENGTH, size);
 			break;
 		default: 
@@ -510,15 +654,14 @@ class Sproto {
 
 	private lencode(typename: string, tbl: any, startpoint: number, st?, spindex?) {
 		let type = null;
-
 		if (st) {
 			type = st;
 		} else {
 			type = this.vquerytype(typename, spindex);
 		}
 
-		if (type === undefined) {
-			console.error("[sproto error]: Invalid field type %s", typename, spindex);
+		if (!type) {
+			console.error("[sproto error]: Invalid field type %s", typename);
 			return ERROR_TYPE;
 		}
 
@@ -533,7 +676,7 @@ class Sproto {
 			return -1;
 		}
 
-		let args = {name: null, value: null, i: 0};
+		let args = {name: null, value: null, i: 0, type: -1, st: -1, spindex: -1};
 
 		for (let f of type.f) {
 			let sz = -1;
@@ -548,22 +691,25 @@ class Sproto {
 				continue;
 			}
 
-			if (f.type.charAt(0) === "*") {
+			if ((f.ntype & SPROTO_TARRAY) === SPROTO_TARRAY) {
 				deatail_type = checkvalue(args, "array");
 				if (deatail_type === null) {
 					return ERROR_TYPE;
 				}
-				let t = f.type.substring(1, f.type.length);
+				
+				args.type = f.ntype & 0x0f;
+				args.st = f.st;
+				args.spindex = spindex;
 
-				sz = this.encode_array(tu, {type: t, name: f.name, spindex: spindex}, this.buffer, data, sumsz);
+				sz = this.encode_array(tu, args, this.buffer, data, sumsz);
 			} else {
-				switch(f.type) {
-				case "boolean":
+				switch(f.ntype) {
+				case SPROTO_TBOOLEAN:
 					deatail_type = checkvalue(args, "boolean");
 					if (deatail_type === null) {
 						return ERROR_TYPE;
 					}
-				case "integer":
+				case SPROTO_TINTEGER:
 					if (deatail_type === null) {
 						deatail_type = checkvalue(args, "number");
 						if (deatail_type === null) {
@@ -585,7 +731,7 @@ class Sproto {
 					}
 					
 					break;
-				case "string":
+				case SPROTO_TSTRING:
 					deatail_type = checkvalue(args, "string");
 					if (deatail_type === null) {
 						return ERROR_TYPE;
@@ -610,7 +756,7 @@ class Sproto {
 						let value_idx = data + SIZEOF_LENGTH;
 						this.buffer.fill(tu, value_idx, value_idx + fsz);
 					} else {
-						fsz = this.lencode(f.type, tu, data + SIZEOF_LENGTH, null, spindex);
+						fsz = this.lencode(f.type, tu, data + SIZEOF_LENGTH);  // struct
 					}
 					if (fsz < 0) {
 						if (fsz === ERROR_TYPE) {
@@ -671,11 +817,11 @@ class Sproto {
 		return SIZEOF_HEADER + index * SIZEOF_FIELD + data_sz;
 	}
 
-	decode_array(type: string, buffer, data_idx: number, sz: number, st?, reqdecode?) {
+	decode_array(ntype: number, args, buffer, data_idx, sz) {
 		let result :any= [];
 
-		switch (type) {
-		case "integer":
+		switch (ntype) {
+		case SPROTO_TINTEGER:
 			let len = buffer[data_idx++];
 			--sz;
 			if (len === SIZEOF_INT32) {
@@ -703,7 +849,7 @@ class Sproto {
 				result = false;
 			}
 			break;
-		case "string":
+		case SPROTO_TSTRING:
 			let i = 0;
 			for (;;) {
 				sz -= SIZEOF_LENGTH;
@@ -721,7 +867,7 @@ class Sproto {
 				}
 			}
 			break;
-		case "boolean":
+		case SPROTO_TBOOLEAN:
 			for (let i = 0; i < sz; ++i) {
 				result[i] = buffer[data_idx + i] === 0 ? false : true;
 			}
@@ -740,7 +886,7 @@ class Sproto {
 				data_idx += SIZEOF_LENGTH;
 				result[j] = {};
 
-				this.ldecode(type, buffer, data_idx, result[j++], null, reqdecode);
+				this.ldecode(args.st, buffer, data_idx, result[j++], null, args.reqdecode);
 				data_idx += len;
 				sz -= len;
 
@@ -767,14 +913,15 @@ class Sproto {
 		return result;
 	}
 
-	private ldecode(typename: string, buffer: Buffer, startpoint:number, result: object, st?, reqdecode?) {
+	private ldecode(typename: string|number, buffer: Buffer, startpoint:number, result: object, st?, reqdecode?) {
 		let fn = this.toword(buffer, startpoint);
 		let size = SIZEOF_HEADER;
 
 		let field_idx = startpoint + SIZEOF_HEADER;
 		let data_idx = startpoint + SIZEOF_HEADER + fn * SIZEOF_FIELD;
 		let tag = -1;
-		let args = {name: null, type: null};
+
+		let args = {st: -1, reqdecode: reqdecode};
 
 		for (var i = 0; i < fn; ++i) {
 			++tag;
@@ -790,24 +937,25 @@ class Sproto {
 			}
 
 			value = (value>>1) - 1;
+
 			let f = this.findtag(typename, tag, st, reqdecode);
-			if (f === null) {
+			if (!f) {
 				continue;
 			}
 
 			let currentdata_idx = data_idx;
-
+			let ntype = f.ntype & 0x0f;
 			if (value < 0) {
 				sz = this.todword(buffer, currentdata_idx);
 				currentdata_idx += SIZEOF_LENGTH;
 				data_idx = currentdata_idx + sz;
 				size += SIZEOF_LENGTH + sz;
 
-				if (f.type.charAt(0) === '*') {
+				if ((f.ntype & SPROTO_TARRAY) === SPROTO_TARRAY) {
 					let array_res :any = [];
 					if (sz > 0) {
-						let t = f.type.substring(1, f.type.length);
-						array_res = this.decode_array(t, buffer, currentdata_idx, sz, st, reqdecode);
+						args.st = f.st;
+						array_res = this.decode_array(ntype, args, buffer, currentdata_idx, sz);
 						if (array_res === false) {
 							console.error("[sproto error]: decode array filed(%s) failed", f.name);
 							return -1;
@@ -815,17 +963,19 @@ class Sproto {
 					}
 					result[f.name] = array_res;
 				} else {
-					switch (f.type) {
-					case "string":
+					switch (ntype) {
+					case SPROTO_TSTRING:
 						result[f.name] = buffer.toString("utf8", currentdata_idx, currentdata_idx + sz);	
 						break;
-					case "integer":
+					case SPROTO_TINTEGER:
 						let low = this.todword(buffer, currentdata_idx);
 						let hi = 0;
+
 						if (sz === SIZEOF_INT64) {
 							low = this.todword(buffer, currentdata_idx, true);
 							hi = this.todword(buffer, currentdata_idx + SIZEOF_INT32, true);
 						} else if (sz !== SIZEOF_INT32) {
+							console.error("[sproto error]: decode integer filed failed, because sz(%d) != %d", sz, SIZEOF_INT32, f);
 							return -1;
 						}
 
@@ -833,7 +983,7 @@ class Sproto {
 						break;
 					default:
 						let subres = {};
-						let tmpsz = this.ldecode(f.type, buffer, currentdata_idx, subres, null, reqdecode);
+						let tmpsz = this.ldecode(f.st, buffer, currentdata_idx, subres, null, reqdecode);
 						if (tmpsz < 0) {
 							return tmpsz;
 						}
@@ -842,11 +992,11 @@ class Sproto {
 						break;
 					}
 				}
-			} else if (f.type !== "integer" && f.type !== "boolean"){ // value>=0，必须是 integer 或者 boolean，所以要先判断 f.type类型
-				console.error("[sproto error]: field(%s) type:", f.name, f.type);
+			} else if (ntype !== SPROTO_TINTEGER && ntype !== SPROTO_TBOOLEAN){ // value>=0，必须是 integer 或者 boolean，所以要先判断 f.type类型
+				console.error("[sproto error]: field(%s) type:", f.name, value, f);
 				return -1;
 			} else {	// value >= 0
-				if (f.type === "boolean") {
+				if (ntype === SPROTO_TBOOLEAN) {
 					result[f.name] = value !== 0 ? true : false;
 				} else {
 					result[f.name] = value;
@@ -900,7 +1050,7 @@ class Sproto {
 		dstbuffer[ff_desstart] = 0xff;
 		dstbuffer[ff_desstart + 1] = align8_n / 8 - 1;
 
-		let start = ff_desstart + 2;
+		let start = ff_desstart + 2
 		let str = "";
 
 		for (let i = start; i < start + n; ++i) {
@@ -1082,15 +1232,23 @@ class Sproto {
 	}
 
 	private querytype(name: string) {
-		return this.t[name];
+		if (this.t[name]) {
+			return this.t[name];
+		}
+
+		let index = this.find_type(name);
+		return this.t[index];
 	}
 
 	private vquerytype(name: string, reqdecode?) {
 		if (!reqdecode) {
-			return this.t[name];
+			return this.querytype(name);
 		} else {
 			let sp = Sproto.sp_tb[reqdecode];
-			return sp.t[name];
+			if (sp.t[name]) {
+				return sp.t[name];
+			}
+			return this.find_type(name, sp.t);
 		}
 	}
 
@@ -1098,8 +1256,9 @@ class Sproto {
 		return this.p[name];
 	}
 
-	private findtag(typename: string, tag: number, st?, reqdecode?) {
+	private findtag(typename: string|number, tag: number, st?, reqdecode?) {
 		let type = null;
+
 		if (!isNull(reqdecode) && isNull(st)) {
 			let sp = Sproto.sp_tb[reqdecode];
 			type = sp.t[typename];
@@ -1107,7 +1266,7 @@ class Sproto {
 			if (st) {
 				type = st;
 			} else {
-				type = this.querytype(typename);
+				type = this.querytype(<string> typename);
 			}
 		}
 
@@ -1128,7 +1287,7 @@ class Sproto {
 	attach() {
 		return function (name, args, session?) {
 			let p = this.queryprotocol(name);
-			if (isNull(p)) {
+			if (!p) {
 				console.error("[sproto error]: can't found ", name);
 				return ;
 			}
@@ -1191,7 +1350,7 @@ class Sproto {
 
 		} else {
 			// response
-			let session = this.header_tmp.session;
+			let session = this.header_tmp.session
 			if (isNull(session)) {
 				console.error("[sproto error]: session not found");
 				return;
@@ -1220,8 +1379,6 @@ class Sproto {
 } 
 
 export { Sproto };
-
-
 
 
 
