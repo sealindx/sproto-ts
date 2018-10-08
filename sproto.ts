@@ -1241,7 +1241,7 @@ class Sproto {
 	}
 
 	private vquerytype(name: string, reqdecode?) {
-		if (!reqdecode) {
+		if (isNull(reqdecode)) {
 			return this.querytype(name);
 		} else {
 			let sp = Sproto.sp_tb[reqdecode];
