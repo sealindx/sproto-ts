@@ -213,6 +213,11 @@ class Sproto {
 		let stype = new Stype(name);
 		let content = type.input.replace(/.?{|}/g, "");
 		let lines = content.match(/\w+\s+\d+\s*:\s*\*?\w+/gi);
+		let errsyntax = content.match(/[a-z]+\s*:\s*\*?[a-z]+/i)
+
+		if (errsyntax) {
+			console.error("[sproto error]: syntax error at", errsyntax[0]);
+		}
 
 		if (isNull(lines)) {
 			return stype;
