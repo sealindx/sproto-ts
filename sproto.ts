@@ -216,7 +216,7 @@ class Sproto {
 		let errsyntax = content.match(/[a-z]+\s*:\s*\*?[a-z]+/i)
 
 		if (errsyntax) {
-			console.error("[sproto error]: syntax error at", errsyntax[0]);
+			console.error("[sproto error]: syntax error at order number:", errsyntax[0]);
 		}
 
 		if (isNull(lines)) {
@@ -274,6 +274,15 @@ class Sproto {
 
 	private parse(text: string) {
 		let types = text.match(/\.\w+[\s\n]*{[^{}]+}/ig);
+		let errsyntax = text.match(/\n\w+[\s\n]*{/ig);
+
+		if (errsyntax) {
+			errsyntax.forEach(protoname	=> {  
+				protoname += " ... }";
+			    console.error("[sproto error]: syntax error at proto name:", protoname.replace(/\n/, ""));
+			});
+		}
+
 		if (isNull(types) === false) {
 			for (let i = 0; i < types.length; i++) {
 				let mtype = types[i];
