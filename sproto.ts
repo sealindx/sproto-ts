@@ -204,7 +204,7 @@ class Sproto {
 		this.header_tmp = {type: null, session: null};
 	}
 
-	private type_create(type) {
+	private type_create(type, protoname?) {
 		let name = type[0];
 		if (name.charAt(0) === ".") {
 			name = name.substr(1, name.length); // substr 去掉第一个字符的点.
@@ -212,11 +212,11 @@ class Sproto {
 
 		let stype = new Stype(name);
 		let content = type.input.replace(/.?{|}/g, "");
-		let lines = content.match(/\w+\s+\d+\s*:\s*\*?\w+/gi);
+		let lines = content.match(/\w+\s+\-?\d+\s*:\s*\*?\w+/gi);
 		let errsyntax = content.match(/[a-z]+\s*:\s*\*?[a-z]+/i)
 
 		if (errsyntax) {
-			console.error("[sproto error]: syntax error at order number:", errsyntax[0]);
+			console.error("[sproto error]: syntax error at tag number:", errsyntax[0]);
 		}
 
 		if (isNull(lines)) {
@@ -226,18 +226,28 @@ class Sproto {
 		let maxn = lines.length;
 		let offset = 8888888888;
 		let offcounter = 0;
+		let tags = []
 
 		for (let i of lines) {
-			let ft = i.split(/\s*(\d+)?\s*:\s*/g);
+			let ft = i.split(/\s*(\-?\d+)?\s*:\s*/g);
 			let tag = Number(ft[1]);
 			let f = new Field(ft[0], tag, ft[2]);
 			stype.f.push(f);
+
+			if (tag < 0) {
+				console.error("[sproto error]: syntax error at tag(%d) number less 0 in type %s", tag, protoname?protoname:name);
+			}
+
+			if (tags[tag]) {
+				console.error("[sproto error]: redefine tag %d in type %s", tag, protoname?protoname:name);
+			}
 
 			if (tag - offset > 1) {
 				++offcounter;
 			}
 
 			offset = tag;
+			tags[tag] = true;
 		}
 
 		maxn += stype.f[0].tag + offcounter;
@@ -247,10 +257,14 @@ class Sproto {
 	}
 
 	protocol_create(protocol: string) {
-		let nametag = protocol.match(/\w+\s+\d+/i)[0];
+		let nametag = protocol.match(/\w+\s+\-?\d+/i)[0];
 		let arr = nametag.split(/\s+/);
 		let name = arr[0];
 		let tag = Number(arr[1]);
+
+		if (tag < 0) {
+			console.error("[sproto error]: syntax error at tag(%d) number less 0 at protocol %s", tag, name);
+		}
 
 		let proto = new Protocol(name, tag);
 		this.p[name] = proto;
@@ -261,13 +275,13 @@ class Sproto {
 		if (requeststr) {
 			let req = ["request"];
 			req["input"] = requeststr[0];
-			proto.st[REQUEST] = this.type_create(req);
+			proto.st[REQUEST] = this.type_create(req, name);
 		}
 
 		if (responsestr) {
 			let resp = ["response"];
 			resp["input"] = responsestr[0];
-			proto.st[RESPONSE] = this.type_create(resp);
+			proto.st[RESPONSE] = this.type_create(resp, name);
 		}
 	}
 
@@ -294,7 +308,7 @@ class Sproto {
 			}
 		}
 
-		let protocols = text.match(/\w+\s+\d+\s*{[\n\t\s]*(request\s*{[^{}]+})?[\n\t\s]*(response\s*{[^{}]+})?[\n\t\s]*}/ig);
+		let protocols = text.match(/\w+\s+\-?\d+\s*{[\n\t\s]*(request\s*{[^{}]+})?[\n\t\s]*(response\s*{[^{}]+})?[\n\t\s]*}/ig);
 		if (isNull(protocols) === false) { 
 			for (let i = 0; i < protocols.length; ++i) {
 				this.protocol_create(protocols[i]);
