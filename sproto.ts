@@ -416,7 +416,8 @@ class Sproto {
 				return ERROR_TYPE;
 			}
 
-			let len = v[i].length;
+			let tu = Buffer.from(v[i]);
+			let len = tu.length;
 			size -= (SIZEOF_LENGTH + len);
 			if (size < 0) {
 				return -1;
@@ -425,7 +426,7 @@ class Sproto {
 
 			let sz = fill_size(data, data_idx, len);
 			let pos = data_idx + SIZEOF_LENGTH;
-			data.fill(v[i], pos, pos + len);
+			data.fill(tu, pos, pos + len);
 
 			data_idx += sz;
 		}
