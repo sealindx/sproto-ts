@@ -67,10 +67,3 @@ import { Buffer } from "buffer";
 tsc test.ts
 node test.js
 ```
-
-
-### 注意
-在网络通信过程中，一定要将要发送的 buffer 转成 base64输出，再经网路socket传输，否则对方在接收时会出现乱码．
-```js
-sendmsg.toString('base64'); // sendmsg的类型是Buffer
-```
