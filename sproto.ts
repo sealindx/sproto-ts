@@ -270,8 +270,8 @@ class Sproto {
 		this.p[name] = proto;
 		this.__pcatch[tag] = proto;
 
-		let requeststr = protocol.match(/request\s*{[^{}]+}/g);
-		let responsestr = protocol.match(/response\s*{[^{}]+}/g);
+		let requeststr = protocol.match(/request\s*{[^{}]*}/g);
+		let responsestr = protocol.match(/response\s*{[^{}]*}/g);
 		if (requeststr) {
 			let req = ["request"];
 			req["input"] = requeststr[0];
@@ -308,7 +308,7 @@ class Sproto {
 			}
 		}
 
-		let protocols = text.match(/\w+\s+\-?\d+\s*{[\n\t\s]*(request\s*{[^{}]+})?[\n\t\s]*(response\s*{[^{}]+})?[\n\t\s]*}/ig);
+		let protocols = text.match(/\w+\s+\-?\d+\s*{[\n\t\s]*(request\s*{[^{}]*})?[\n\t\s]*(response\s*{[^{}]*})?[\n\t\s]*}/ig);
 		if (isNull(protocols) === false) { 
 			for (let i = 0; i < protocols.length; ++i) {
 				this.protocol_create(protocols[i]);
